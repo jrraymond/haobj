@@ -16,5 +16,5 @@ cabal.config
 *.swp
 *.swo
 
-#*.obj
-#*.mtl
+*.obj
+*.mtl
