@@ -18,7 +18,6 @@ cabal-version:       >=1.10
 library
   exposed-modules:     Types
                      , Mtl
-                     , Obj
                      , Tests
   -- other-modules:       
   -- other-extensions:    

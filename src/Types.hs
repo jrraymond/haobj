@@ -1,5 +1,7 @@
 module Types where
 
+--TODO switch to arrays/vectors
+
 data V3 = V3 !Float !Float !Float deriving (Eq,Read,Show)
 
 --TODO incomplete, at least need to add texture maps
@@ -12,9 +14,17 @@ data Material = Material { mNs    :: !Float   --specular exponent
                          , mIllum :: !Int     --illumination model
                          } deriving (Eq,Read,Show)
 
-data Object = Triangle !V3 !V3 !V3 !Material deriving (Eq,Read,Show)
+data Mesh = Mesh { mVertices  :: [V3]
+                 , mNormals   :: [V3]
+                 , mFaces     :: [(Material,Bool,[Face])]
+                 } deriving (Eq,Read,Show)
 
-data Face = Face !Int !Int !Int deriving (Eq,Show,Read)
+newtype Face = Face [FaceV] deriving (Eq,Read,Show)
+
+data FaceV = FaceV { fvVertex  :: !Int
+                   , fvTexture :: !Int
+                   , fvNormal  :: !Int 
+                   } deriving (Eq,Show,Read)
 
 
 {- Illumination models:
