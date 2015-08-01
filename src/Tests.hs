@@ -1,9 +1,5 @@
 module Tests where
 
-import Types
-
-
-
 mtl0 :: String 
 mtl0 = "newmtl GreenDull\nNs 96.078431\n" ++ 
        "Ka 0.000000 0.000000 0.000000\n" ++

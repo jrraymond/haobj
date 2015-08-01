@@ -1,25 +1,43 @@
-{-# LANGUAGE FlexibleContexts #-}
+module HaObj where
 
-module Mtl where
-
-{- Parses .mtl files -}
-import Types
-
-import Control.Exception (evaluate)
-import Control.Monad.Identity
-import Data.Map (Map)
-import qualified Data.Map as Map
+import Control.Monad
 import System.IO (hGetContents, IOMode (..),withFile)
 import Text.Parsec
-import Text.Parsec.Char (string,char,alphaNum)
+import Text.Parsec.Char (string,char)
 
-readObjAndMtl fname = withFile fname ReadMode (\h -> do
+--TODO switch to arrays/vectors
+data V3 = V3 !Float !Float !Float deriving (Eq,Read,Show)
+
+--TODO incomplete, at least need to add texture maps
+data Material = Material { mNs    :: !Float   --specular exponent
+                         , mKa    :: !V3      --ambient color
+                         , mKd    :: !V3      --diffuse color
+                         , mKs    :: !V3      --specular color
+                         , mNi    :: !Float   --optical density (refraction)
+                         , mD     :: !Float    --dissolved (halo factor)
+                         , mIllum :: !Int     --illumination model
+                         } deriving (Eq,Read,Show)
+
+data Mesh = Mesh { mVertices  :: [V3]
+                 , mNormals   :: [V3]
+                 , mFaces     :: [(Material,Bool,[Face])]
+                 } deriving (Eq,Read,Show)
+
+newtype Face = Face [FaceV] deriving (Eq,Read,Show)
+
+data FaceV = FaceV { fvVertex  :: !Int
+                   , fvTexture :: !Int
+                   , fvNormal  :: !Int 
+                   } deriving (Eq,Show,Read)
+
+
+{- parses .obj files -}
+parseObj fname = withFile fname ReadMode (\h -> do
   input <- hGetContents h
   case runParser readObj () fname input of
     Left e -> return $ Left e
     Right (mtllib,meshes) -> withFile mtllib ReadMode (\h2 -> do
       mtlInput <- hGetContents h2
-      evaluate (length mtlInput)
       case runParser readMtl () mtllib mtlInput of
         Left e -> return $ Left e
         Right mtls -> return $ Right (mtls,meshes)))
@@ -32,7 +50,7 @@ readObj = do
   return (mtllib,meshes)
 
 mesh = do
-  _ <- char 'o'
+  char 'o'
   spaces
   name <- manyTill anyChar endOfLine
   vs <- many (try vertex)
@@ -67,7 +85,7 @@ materialAndFaces = do
   return (mtl, s == "on", faces,ls)
 
 ngonFace = do 
-  _ <- char 'f'
+  char 'f'
   spaces
   vs <- sepEndBy faceEl spaces
   return (Face vs)
@@ -86,7 +104,6 @@ vertexPair = do
   v2 <- char '/' >> uint
   return (v1,v2)
 
-readMtl :: ParsecT String u Identity [(String,Material)]
 readMtl = do
   skipMany ignorable 
   manyTill (do skipMany ignorable 
@@ -98,9 +115,8 @@ comments = char '#' >> manyTill anyToken endOfLine >> return ()
 
 ignorable = comments <|> void endOfLine
 
-material :: ParsecT String u Identity (String,Material)
 material = do
-  _ <- string "newmtl"
+  string "newmtl"
   spaces
   name <- manyTill anyChar endOfLine
   ns <- parseNs

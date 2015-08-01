@@ -16,8 +16,7 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Types
-                     , Mtl
+  exposed-modules:     HaObj
                      , Tests
   -- other-modules:       
   -- other-extensions:    
@@ -27,4 +26,4 @@ library
                      , mtl
   hs-source-dirs:      src
   default-language:    Haskell2010
-  ghc-options: -Wall
+  ghc-options: -O2 -Wall -fno-warn-missing-signatures -fno-warn-unused-do-bind
