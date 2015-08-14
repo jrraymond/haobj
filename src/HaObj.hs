@@ -1,9 +1,13 @@
+{-# OPTIONS_GHC -fno-warn-missing-signatures -fno-warn-unused-do-bind #-}
 module HaObj where
 
 import Control.Monad
+import Data.List (partition,unzip7)
+import Data.Map (Map)
+import Data.Maybe (fromMaybe)
+import qualified Data.Map as M
 import System.IO (hGetContents, IOMode (..),withFile)
 import Text.Parsec
-import Text.Parsec.Char (string,char)
 
 --TODO switch to arrays/vectors
 data V3 = V3 !Float !Float !Float deriving (Eq,Read,Show)
@@ -18,21 +22,48 @@ data Material = Material { mNs    :: !Float   --specular exponent
                          , mIllum :: !Int     --illumination model
                          } deriving (Eq,Read,Show)
 
-data Mesh = Mesh { mVertices  :: [V3]
-                 , mNormals   :: [V3]
-                 , mFaces     :: [(Material,Bool,[Face])]
+data Mesh = Mesh { mVertices     :: [V3]
+                 , mNormals      :: [V3]
+                 , mTextures     :: [V3]
+                 , mParamSpaceVs :: [V3]
+                 , mFaces        :: [(Material,[Face])]
+                 , mSmoothFaces  :: [(Material,[Face])]
+                 , mLines        :: [(Int,Int)]
                  } deriving (Eq,Read,Show)
 
-newtype Face = Face [FaceV] deriving (Eq,Read,Show)
+--material index and vertices
+data Face = Face [FaceV] deriving (Eq,Read,Show)
 
-data FaceV = FaceV { fvVertex  :: !Int
-                   , fvTexture :: !Int
-                   , fvNormal  :: !Int 
+
+data FaceV = FaceV { fvVertex   :: !Int
+                   , fvTexture  :: !Int
+                   , fvNormal   :: !Int 
                    } deriving (Eq,Show,Read)
 
 
+makeScene :: [(String, Material)]
+          -> [(String,[V3],[V3],[V3],[V3],[(String,Int,[Face])],[(Int,Int)])]
+          -> Mesh
+makeScene mtls0 objs0 =
+  let mtls = M.fromList mtls0
+      (_,vs,ns,ts,pss,mfaces,ls) = unzip7 objs0
+      mfaces' = map (\(m,s,fs) -> (findMaterial mtls m,s,fs)) (concat mfaces)
+      (notSmooth,smooth) = partition (\(_,s,_) -> s == 0) mfaces'
+      notSmooth' = map dropMid notSmooth
+      smooth' = map dropMid smooth
+  in Mesh (concat vs) (concat ns) (concat ts) (concat pss) notSmooth' smooth' (concat ls)
+
+findMaterial :: (Ord a, Show a) => Map a b -> a -> b
+findMaterial dict m = fromMaybe (error (show m ++ " not found")) (M.lookup m dict)
+
+dropMid :: (a,b,c) -> (a,c)
+dropMid (a,_,c) = (a,c)
+
 {- parses .obj files -}
-parseObj fname = withFile fname ReadMode (\h -> do
+parseObj fname = (fmap . fmap) (uncurry makeScene) (parseObj' fname)
+
+{- if you don't want to use the types -}
+parseObj' fname = withFile fname ReadMode (\h -> do
   input <- hGetContents h
   case runParser readObj () fname input of
     Left e -> return $ Left e
@@ -42,7 +73,6 @@ parseObj fname = withFile fname ReadMode (\h -> do
         Left e -> return $ Left e
         Right mtls -> return $ Right (mtls,meshes)))
   
-
 readObj = do
   skipMany ignorable
   mtllib <- string "mtllib" >> spaces >> manyTill anyChar endOfLine
@@ -58,7 +88,8 @@ mesh = do
   ns <- many (try normal)
   pss <- many (try parameterSpace)
   mfaces <- many materialAndFaces
-  return (vs,ts,ns,pss,mfaces)
+  ls <- many (try line)
+  return (name,vs,ns,ts,pss,mfaces,ls)
 
 vertex = char 'v' >> spaces >> parseV3
 
@@ -78,11 +109,10 @@ parameterSpace = string "vp" >> spaces >> parseV3''
 
 materialAndFaces = do
   mtl <- string "usemtl" >> spaces >> manyTill anyChar endOfLine
-  s <- try (string "s" >> spaces >> (try (string "off") <|> string "on"))
-       <|> return "on"
+  s <- try (string "s" >> spaces >> (try (string "off" >> return 0) <|> uint))
+       <|> return 0
   faces <- skipMany endOfLine >> many1 ngonFace
-  ls <- many (try line)
-  return (mtl, s == "on", faces,ls)
+  return (mtl, s, faces)
 
 ngonFace = do 
   char 'f'
@@ -124,8 +154,8 @@ material = do
   ka <- parseKa
   kd <- parseKd
   ks <- parseKs
-  ni <- parseNi
-  endOfLine
+  ni <- try parseNi <* endOfLine <|> return 1.0
+  --endOfLine
   d <- parseD
   endOfLine
   illum <- parseIllum
